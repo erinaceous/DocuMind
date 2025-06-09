@@ -37,5 +37,5 @@
 
 1. Clone the repo:
    ```bash
-   git clone https://github.com/your-username/DocuMind-Open.git
+   git clone https://github.com/your-username/DocuMind.git
    cd DocuMind-Open/backend
