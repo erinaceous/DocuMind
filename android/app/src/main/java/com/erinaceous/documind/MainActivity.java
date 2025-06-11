@@ -67,6 +67,7 @@ public class MainActivity extends AppCompatActivity {
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1/")
 //        https://dashscope.aliyuncs.com/api/v1/
+//                
                 .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
