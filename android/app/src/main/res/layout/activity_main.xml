@@ -1,41 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mainLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="8dp">
 
-    <Button
-        android:id="@+id/btnSelectFile"
+    <!-- File select section -->
+    <LinearLayout
+        android:id="@+id/fileSelectLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Select PDF or DOCX" />
+        android:orientation="horizontal"
+        android:paddingBottom="8dp">
 
-    <TextView
-        android:id="@+id/tvFileName"
+        <Button
+            android:id="@+id/selectFileButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Select File" />
+
+        <TextView
+            android:id="@+id/selectedFileName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_gravity="center_vertical"
+            android:layout_weight="1"
+            android:text="No file selected"
+            android:textColor="#888888"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <!-- Chat message list -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/chatRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:overScrollMode="always" />
+
+    <!-- Message input and send -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="No file selected"
-        android:paddingTop="8dp" />
+        android:orientation="horizontal"
+        android:paddingTop="8dp">
 
-    <EditText
-        android:id="@+id/etQuestion"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Type your question here"
-        android:paddingTop="12dp" />
+        <EditText
+            android:id="@+id/editTextMessage"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:hint="Ask something..."
+            android:inputType="text" />
 
-    <Button
-        android:id="@+id/btnAsk"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Ask"
-        android:layout_marginTop="12dp" />
-
-    <TextView
-        android:id="@+id/tvAnswer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Answer will appear here"
-        android:paddingTop="12dp" />
+        <Button
+            android:id="@+id/sendButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Send" />
+    </LinearLayout>
 </LinearLayout>
