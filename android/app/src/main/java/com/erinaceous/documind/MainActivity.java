@@ -38,7 +38,6 @@ import retrofit2.Callback;
 import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
-
 public class MainActivity extends AppCompatActivity {
 
     private static final int FILE_SELECT_CODE = 1001;
@@ -53,15 +52,14 @@ public class MainActivity extends AppCompatActivity {
         OkHttpClient client = new OkHttpClient.Builder()
                 .addInterceptor(chain -> {
                     Request original = chain.request();
+
                     Request.Builder builder = original.newBuilder()
-                            .header("Authorization", "Bearer YOUR_API_KEY");
+                            .header("Authorization", "Bearer YOU_API_KEY");
                     return chain.proceed(builder.build());
                 }).build();
 
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1/")
-//        https://dashscope.aliyuncs.com/api/v1/
-//
                 .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();

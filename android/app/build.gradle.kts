@@ -6,7 +6,13 @@ android {
     namespace = "com.erinaceous.documind"
     compileSdk = 34
 
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
+        val llmApiKey: String = project.findProperty("LLM_API_KEY") as String? ?: ""
+        buildConfigField("String", "LLM_API_KEY", "\"$llmApiKey\"")
+        println("Qwen API Key: $llmApiKey")
         applicationId = "com.erinaceous.documind"
         minSdk = 26
         targetSdk = 34
@@ -14,6 +20,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
     }
 
     buildTypes {
