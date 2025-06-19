@@ -1,13 +1,10 @@
 package com.erinaceous.documind;
 
 import android.content.Intent;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.OpenableColumns;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -17,17 +14,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.erinaceous.documind.chat.ChatAdapter;
 import com.erinaceous.documind.chat.ChatMessage;
-import com.erinaceous.documind.network.LLMApi;
-import com.erinaceous.documind.network.LLMRequest;
-import com.erinaceous.documind.network.LLMResponse;
+import com.erinaceous.documind.file.FileManager;
+import com.erinaceous.documind.io.QwenV1Api;
+import com.erinaceous.documind.io.QwenV1Api.QwenPlusResponse;
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
-import com.tom_roush.pdfbox.pdmodel.PDDocument;
-import com.tom_roush.pdfbox.text.PDFTextStripper;
 
-import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,34 +29,15 @@ import retrofit2.Callback;
 import retrofit2.Response;
 import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
+
 public class MainActivity extends AppCompatActivity {
 
     private static final int FILE_SELECT_CODE = 1001;
-    LLMApi api;
-    private Uri selectedFileUri;
-    private TextView selectedFileName;
-    private String selectedFileContentText;
     private final List<ChatMessage> chatMessages = new ArrayList<>();
+    QwenV1Api api;
     private ChatAdapter adapter;
-
-    private LLMApi createApi() {
-        OkHttpClient client = new OkHttpClient.Builder()
-                .addInterceptor(chain -> {
-                    Request original = chain.request();
-
-                    Request.Builder builder = original.newBuilder()
-                            .header("Authorization", "Bearer YOU_API_KEY");
-                    return chain.proceed(builder.build());
-                }).build();
-
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1/")
-                .client(client)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
-
-        return retrofit.create(LLMApi.class);
-    }
+    private RecyclerView chatRecyclerView;
+    private final FileManager fileManager = new FileManager(this);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,7 +49,7 @@ public class MainActivity extends AppCompatActivity {
         api = createApi();
 
         // File select button
-        selectedFileName = findViewById(R.id.selectedFileName);
+        fileManager.setSelectedFileNameTextView(findViewById(R.id.selectedFileName));
         Button selectFileButton = findViewById(R.id.selectFileButton);
 
         selectFileButton.setOnClickListener(v -> {
@@ -88,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        RecyclerView chatRecyclerView = findViewById(R.id.chatRecyclerView);
+        chatRecyclerView = findViewById(R.id.chatRecyclerView);
         EditText editTextMessage = findViewById(R.id.editTextMessage);
         Button sendButton = findViewById(R.id.sendButton);
 
@@ -98,7 +70,7 @@ public class MainActivity extends AppCompatActivity {
 
         sendButton.setOnClickListener(v -> {
 
-            if (selectedFileUri == null) {
+            if (fileManager.getSelectedFileUri() == null) {
                 Toast.makeText(this, "Please select a file", Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -116,11 +88,12 @@ public class MainActivity extends AppCompatActivity {
             editTextMessage.setText("");
 
             // Call Qwen API here, then add the response
-            LLMRequest request = new LLMRequest(selectedFileContentText, question);
+//            QwenV1Api.QwenPlusRequest request = new QwenV1Api.QwenPlusRequest(selectedFileContentText, question);
+            QwenV1Api.QwenPlusRequest request = new QwenV1Api.QwenPlusRequest("", question);
 
-            api.getAnswer(request).enqueue(new Callback<LLMResponse>() {
+            api.getAnswer(request).enqueue(new Callback<QwenPlusResponse>() {
                 @Override
-                public void onResponse(Call<LLMResponse> call, Response<LLMResponse> response) {
+                public void onResponse(Call<QwenPlusResponse> call, Response<QwenPlusResponse> response) {
                     if (response.isSuccessful() && response.body() != null) {
                         String answer = response.body().choices.get(0).message.content;
                         chatMessages.add(new ChatMessage(answer, ChatMessage.Sender.AI));
@@ -129,17 +102,13 @@ public class MainActivity extends AppCompatActivity {
                     }
                     adapter.notifyItemInserted(chatMessages.size() - 1);
                     chatRecyclerView.scrollToPosition(chatMessages.size() - 1);
-//                    adapter.notifyDataSetChanged();
-
                 }
 
                 @Override
-                public void onFailure(Call<LLMResponse> call, Throwable t) {
+                public void onFailure(Call<QwenPlusResponse> call, Throwable t) {
                     chatMessages.add(new ChatMessage("Error: " + t.getMessage(), ChatMessage.Sender.AI));
                     adapter.notifyItemInserted(chatMessages.size() - 1);
                     chatRecyclerView.scrollToPosition(chatMessages.size() - 1);
-//                    adapter.notifyDataSetChanged();
-
                 }
             });
         });
@@ -147,56 +116,43 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Handle file selection result
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == FILE_SELECT_CODE && resultCode == RESULT_OK && data != null) {
-            selectedFileUri = data.getData();
+            Uri selectedFileUri = data.getData();
             if (selectedFileUri != null) {
-                String fileName = getFileNameFromUri(selectedFileUri);
-                selectedFileName.setText(fileName);
-                selectedFileContentText = extractFileText(selectedFileUri);
-                chatMessages.add(new ChatMessage("📄 " + fileName + " loaded.", ChatMessage.Sender.USER));
-                chatMessages.add(new ChatMessage(selectedFileContentText, ChatMessage.Sender.AI));
-                adapter.notifyDataSetChanged();
+                fileManager.setSelectedFileUri(selectedFileUri);
+
+                chatMessages.add(new ChatMessage("📄 " + fileManager.getFileName() + " loaded.", ChatMessage.Sender.USER));
+                chatMessages.add(new ChatMessage(fileManager.getFullText(), ChatMessage.Sender.AI));
+                adapter.notifyItemInserted(chatMessages.size() - 1);
+                chatRecyclerView.scrollToPosition(chatMessages.size() - 1);
 
             }
         }
     }
-
     // Get filename from URI
-    private String getFileNameFromUri(Uri uri) {
-        String result = "Unknown";
-        if (uri.getScheme().equals("content")) {
-            try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
-                if (cursor != null && cursor.moveToFirst()) {
-                    result = cursor.getString(cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME));
-                }
-            }
-        }
-        return result;
+
+    private QwenV1Api createApi() {
+        OkHttpClient client = new OkHttpClient.Builder()
+                .addInterceptor(chain -> {
+                    Request original = chain.request();
+
+                    Request.Builder builder = original.newBuilder()
+                            .header("Authorization", "Bearer YOUR_API_ID");
+                    return chain.proceed(builder.build());
+                }).build();
+
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1/")
+                .client(client)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+
+        return retrofit.create(QwenV1Api.class);
     }
 
-    private String extractFileText(Uri uri) {
-        String type = getContentResolver().getType(uri);
-        try (InputStream inputStream = getContentResolver().openInputStream(uri)) {
-            if (type != null && type.contains("pdf")) {
-                PDDocument document = PDDocument.load(inputStream);
-                PDFTextStripper stripper = new PDFTextStripper();
-                String text = stripper.getText(document);
-                document.close();
-                return text;
-            } else if (type != null && type.contains("officedocument")) {
-                XWPFDocument doc = new XWPFDocument(inputStream);
-                XWPFWordExtractor extractor = new XWPFWordExtractor(doc);
-                String text = extractor.getText();
-                extractor.close();
-                return text;
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return "";
-    }
 }
