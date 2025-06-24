@@ -1,6 +1,7 @@
 plugins {
-    id("org.jetbrains.kotlin.kapt")
-    alias(libs.plugins.android.application)
+    id("com.android.application")
+    kotlin("android") version "1.9.21"
+    kotlin("kapt") version "1.9.21"
 }
 
 android {

@@ -6,7 +6,13 @@ import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.widget.TextView;
 
+import com.erinaceous.documind.Manager;
+import com.erinaceous.documind.chat.ChatAgent;
+import com.erinaceous.documind.chat.ChatMessage;
+import com.erinaceous.documind.dao.ChunkEmbedding;
+import com.erinaceous.documind.network.QwenV1Api;
 import com.erinaceous.documind.tools.TextTools;
+import com.google.gson.Gson;
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
 import com.tom_roush.pdfbox.text.PDFTextStripper;
 
@@ -17,15 +23,20 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileManager {
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+public class FileAgent {
     private final ContextWrapper contextWrapper;
     private String fullText;
     private Uri selectedFileUri;
     private TextView selectedFileNameTextView;
     private String fileName;
     private List<String> selectedFileContentChunks;
+    private ChatAgent chatAgent = null;
 
-    public FileManager(ContextWrapper contextWrapper) {
+    public FileAgent(ContextWrapper contextWrapper) {
         this.contextWrapper = contextWrapper;
     }
 
@@ -76,7 +87,7 @@ public class FileManager {
         return selectedFileUri;
     }
 
-    public FileManager setSelectedFileUri(Uri selectedFileUri) {
+    public FileAgent setSelectedFileUri(Uri selectedFileUri) {
         this.selectedFileUri = selectedFileUri;
         this.fileName = getFileNameFromUri(selectedFileUri);
         selectedFileNameTextView.setText(fileName);
@@ -84,11 +95,41 @@ public class FileManager {
         return this;
     }
 
+    private void getEmbeddings(List<String> chunkList) {
+        QwenV1Api.QwenEmbeddingRequest qwenEmbeddingRequest = new QwenV1Api.QwenEmbeddingRequest(chunkList);
+
+        Manager.getInstance(contextWrapper).getQwenV1Api().getEmbedding(qwenEmbeddingRequest).enqueue(new Callback<QwenV1Api.QwenEmbeddingResponse>() {
+            @Override
+            public void onResponse(Call<QwenV1Api.QwenEmbeddingResponse> call, Response<QwenV1Api.QwenEmbeddingResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+
+                    List<ChunkEmbedding> chunkEmbeddingList = new ArrayList<>();
+
+                    for (int i = 0; i < response.body().data.size(); i++) {
+                        String json = new Gson().toJson(response.body().data.get(i));
+                        chunkEmbeddingList.add(new ChunkEmbedding(chunkList.get(i), json));
+                    }
+
+                    Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().insertAll(chunkEmbeddingList);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<QwenV1Api.QwenEmbeddingResponse> call, Throwable t) {
+                if (null == chatAgent) {
+                    return;
+                }
+
+                chatAgent.instantMessage(new ChatMessage("Error: " + t.getMessage(), ChatMessage.Sender.AI));
+            }
+        });
+    }
+
     public TextView getSelectedFileNameTextView() {
         return selectedFileNameTextView;
     }
 
-    public FileManager setSelectedFileNameTextView(TextView selectedFileNameTextView) {
+    public FileAgent setSelectedFileNameTextView(TextView selectedFileNameTextView) {
         this.selectedFileNameTextView = selectedFileNameTextView;
         return this;
     }
@@ -99,5 +140,9 @@ public class FileManager {
 
     public String getFileName() {
         return fileName;
+    }
+
+    public void setChatAgent(ChatAgent chatAgent) {
+        this.chatAgent = chatAgent;
     }
 }

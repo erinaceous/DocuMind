@@ -9,35 +9,23 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
-import com.erinaceous.documind.chat.ChatAdapter;
+import com.erinaceous.documind.chat.ChatAgent;
 import com.erinaceous.documind.chat.ChatMessage;
-import com.erinaceous.documind.file.FileManager;
-import com.erinaceous.documind.io.QwenV1Api;
-import com.erinaceous.documind.io.QwenV1Api.QwenPlusResponse;
+import com.erinaceous.documind.file.FileAgent;
+import com.erinaceous.documind.network.QwenV1Api;
+import com.erinaceous.documind.network.QwenV1Api.QwenPlusResponse;
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
-import retrofit2.Retrofit;
-import retrofit2.converter.gson.GsonConverterFactory;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final int FILE_SELECT_CODE = 1001;
-    private final List<ChatMessage> chatMessages = new ArrayList<>();
-    QwenV1Api api;
-    private ChatAdapter adapter;
-    private RecyclerView chatRecyclerView;
-    private final FileManager fileManager = new FileManager(this);
+    private final FileAgent fileAgent = new FileAgent(this);
+    private final ChatAgent chatAgent = new ChatAgent(this);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,10 +34,8 @@ public class MainActivity extends AppCompatActivity {
 
         PDFBoxResourceLoader.init(getApplicationContext());
 
-        api = createApi();
-
         // File select button
-        fileManager.setSelectedFileNameTextView(findViewById(R.id.selectedFileName));
+        fileAgent.setSelectedFileNameTextView(findViewById(R.id.selectedFileName));
         Button selectFileButton = findViewById(R.id.selectFileButton);
 
         selectFileButton.setOnClickListener(v -> {
@@ -59,18 +45,15 @@ public class MainActivity extends AppCompatActivity {
             startActivityForResult(Intent.createChooser(intent, "Choose File"), FILE_SELECT_CODE);
         });
 
+        chatAgent.setChatRecyclerView(findViewById(R.id.chatRecyclerView));
+        fileAgent.setChatAgent(chatAgent);
 
-        chatRecyclerView = findViewById(R.id.chatRecyclerView);
         EditText editTextMessage = findViewById(R.id.editTextMessage);
         Button sendButton = findViewById(R.id.sendButton);
 
-        adapter = new ChatAdapter(chatMessages);
-        chatRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-        chatRecyclerView.setAdapter(adapter);
-
         sendButton.setOnClickListener(v -> {
 
-            if (fileManager.getSelectedFileUri() == null) {
+            if (fileAgent.getSelectedFileUri() == null) {
                 Toast.makeText(this, "Please select a file", Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -82,33 +65,29 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            chatMessages.add(new ChatMessage(question, ChatMessage.Sender.USER));
-            adapter.notifyItemInserted(chatMessages.size() - 1);
-            chatRecyclerView.scrollToPosition(chatMessages.size() - 1);
+            chatAgent.instantMessage(new ChatMessage(question, ChatMessage.Sender.USER));
             editTextMessage.setText("");
 
             // Call Qwen API here, then add the response
 //            QwenV1Api.QwenPlusRequest request = new QwenV1Api.QwenPlusRequest(selectedFileContentText, question);
-            QwenV1Api.QwenPlusRequest request = new QwenV1Api.QwenPlusRequest("", question);
+            //TODO
+            //TODO
+            QwenV1Api.QwenPlusRequest qwenPlusRequest = new QwenV1Api.QwenPlusRequest("", question);
 
-            api.getAnswer(request).enqueue(new Callback<QwenPlusResponse>() {
+            Manager.getInstance(this).getQwenV1Api().getAnswer(qwenPlusRequest).enqueue(new Callback<QwenPlusResponse>() {
                 @Override
                 public void onResponse(Call<QwenPlusResponse> call, Response<QwenPlusResponse> response) {
                     if (response.isSuccessful() && response.body() != null) {
                         String answer = response.body().choices.get(0).message.content;
-                        chatMessages.add(new ChatMessage(answer, ChatMessage.Sender.AI));
+                        chatAgent.instantMessage(new ChatMessage(answer, ChatMessage.Sender.AI));
                     } else {
-                        chatMessages.add(new ChatMessage("Failed to connect to Qwen API", ChatMessage.Sender.AI));
+                        chatAgent.instantMessage(new ChatMessage("Failed to connect to Qwen API", ChatMessage.Sender.AI));
                     }
-                    adapter.notifyItemInserted(chatMessages.size() - 1);
-                    chatRecyclerView.scrollToPosition(chatMessages.size() - 1);
                 }
 
                 @Override
                 public void onFailure(Call<QwenPlusResponse> call, Throwable t) {
-                    chatMessages.add(new ChatMessage("Error: " + t.getMessage(), ChatMessage.Sender.AI));
-                    adapter.notifyItemInserted(chatMessages.size() - 1);
-                    chatRecyclerView.scrollToPosition(chatMessages.size() - 1);
+                    chatAgent.instantMessage(new ChatMessage("Error: " + t.getMessage(), ChatMessage.Sender.AI));
                 }
             });
         });
@@ -124,35 +103,13 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == FILE_SELECT_CODE && resultCode == RESULT_OK && data != null) {
             Uri selectedFileUri = data.getData();
             if (selectedFileUri != null) {
-                fileManager.setSelectedFileUri(selectedFileUri);
-
-                chatMessages.add(new ChatMessage("📄 " + fileManager.getFileName() + " loaded.", ChatMessage.Sender.USER));
-                chatMessages.add(new ChatMessage(fileManager.getFullText(), ChatMessage.Sender.AI));
-                adapter.notifyItemInserted(chatMessages.size() - 1);
-                chatRecyclerView.scrollToPosition(chatMessages.size() - 1);
-
+                fileAgent.setSelectedFileUri(selectedFileUri);
+                chatAgent.instantMessage(new ChatMessage("📄 " + fileAgent.getFileName() + " loaded.", ChatMessage.Sender.USER));
+                chatAgent.instantMessage(new ChatMessage(fileAgent.getFullText(), ChatMessage.Sender.AI));
             }
         }
     }
     // Get filename from URI
 
-    private QwenV1Api createApi() {
-        OkHttpClient client = new OkHttpClient.Builder()
-                .addInterceptor(chain -> {
-                    Request original = chain.request();
-
-                    Request.Builder builder = original.newBuilder()
-                            .header("Authorization", "Bearer YOUR_API_ID");
-                    return chain.proceed(builder.build());
-                }).build();
-
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1/")
-                .client(client)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
-
-        return retrofit.create(QwenV1Api.class);
-    }
 
 }
