@@ -26,7 +26,7 @@ public interface QwenV1Api {
             this.model = "qwen-plus"; // or your model name
             this.messages = Arrays.asList(
                     new Message("system", "You are a helpful assistant."),
-                    new Message("user", "Content: " + content + "\n\nQuestion: " + question)
+                    new Message("user", "Content: \\n\\n" + content + "\n\nQuestion: " + question)
             );
         }
 

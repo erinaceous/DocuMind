@@ -12,10 +12,18 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.erinaceous.documind.chat.ChatAgent;
 import com.erinaceous.documind.chat.ChatMessage;
+import com.erinaceous.documind.dao.ChunkEmbedding;
 import com.erinaceous.documind.file.FileAgent;
+import com.erinaceous.documind.network.EmbeddingFetcher;
 import com.erinaceous.documind.network.QwenV1Api;
 import com.erinaceous.documind.network.QwenV1Api.QwenPlusResponse;
+import com.google.gson.Gson;
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader;
+
+import org.apache.commons.compress.utils.Lists;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -65,14 +73,34 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
+            List<String> questionList = Lists.newArrayList();
+            questionList.add(question);
+            List<Float> questionEmbeddingVector = Lists.newArrayList();
+            new EmbeddingFetcher(this, chatAgent) {
+                @Override
+                protected void deal(Response<QwenV1Api.QwenEmbeddingResponse> response) {
+                    List<Float> localQuestionEmbeddingVector = response.body().data.get(0).embedding;
+                    questionEmbeddingVector.addAll(localQuestionEmbeddingVector);
+                }
+            }.run(questionList);
+
             chatAgent.instantMessage(new ChatMessage(question, ChatMessage.Sender.USER));
             editTextMessage.setText("");
+
+            List<ChunkEmbedding> allChunks = Manager.getInstance(this).getAppDatabase().chunkEmbeddingDao().getAll();
+            List<ChunkEmbedding> topChunks = fileAgent.getTopNRelevantChunks(allChunks, questionEmbeddingVector, 3);
+
+
+            StringBuilder contextBuilder = new StringBuilder("");
+            for (int i = 0; i < topChunks.size(); i++) {
+                contextBuilder.append("Chunk ").append(i + 1).append(": ").append(topChunks.get(i).chunkText).append("\n");
+            }
 
             // Call Qwen API here, then add the response
 //            QwenV1Api.QwenPlusRequest request = new QwenV1Api.QwenPlusRequest(selectedFileContentText, question);
             //TODO
             //TODO
-            QwenV1Api.QwenPlusRequest qwenPlusRequest = new QwenV1Api.QwenPlusRequest("", question);
+            QwenV1Api.QwenPlusRequest qwenPlusRequest = new QwenV1Api.QwenPlusRequest(contextBuilder.toString(), question);
 
             Manager.getInstance(this).getQwenV1Api().getAnswer(qwenPlusRequest).enqueue(new Callback<QwenPlusResponse>() {
                 @Override

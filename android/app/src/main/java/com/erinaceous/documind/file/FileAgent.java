@@ -4,15 +4,18 @@ import android.content.ContextWrapper;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
+import android.util.Pair;
 import android.widget.TextView;
 
 import com.erinaceous.documind.Manager;
 import com.erinaceous.documind.chat.ChatAgent;
 import com.erinaceous.documind.chat.ChatMessage;
 import com.erinaceous.documind.dao.ChunkEmbedding;
+import com.erinaceous.documind.network.EmbeddingFetcher;
 import com.erinaceous.documind.network.QwenV1Api;
 import com.erinaceous.documind.tools.TextTools;
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.tom_roush.pdfbox.pdmodel.PDDocument;
 import com.tom_roush.pdfbox.text.PDFTextStripper;
 
@@ -20,6 +23,7 @@ import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 
 import java.io.InputStream;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -92,37 +96,25 @@ public class FileAgent {
         this.fileName = getFileNameFromUri(selectedFileUri);
         selectedFileNameTextView.setText(fileName);
         selectedFileContentChunks = extractFileChunks(selectedFileUri);
+        saveEmbeddings(selectedFileContentChunks);
         return this;
     }
 
-    private void getEmbeddings(List<String> chunkList) {
-        QwenV1Api.QwenEmbeddingRequest qwenEmbeddingRequest = new QwenV1Api.QwenEmbeddingRequest(chunkList);
-
-        Manager.getInstance(contextWrapper).getQwenV1Api().getEmbedding(qwenEmbeddingRequest).enqueue(new Callback<QwenV1Api.QwenEmbeddingResponse>() {
+    private void saveEmbeddings(List<String> chunkList) {
+        new EmbeddingFetcher(contextWrapper, chatAgent) {
             @Override
-            public void onResponse(Call<QwenV1Api.QwenEmbeddingResponse> call, Response<QwenV1Api.QwenEmbeddingResponse> response) {
-                if (response.isSuccessful() && response.body() != null) {
+            protected void deal(Response<QwenV1Api.QwenEmbeddingResponse> response) {
+                List<ChunkEmbedding> chunkEmbeddingList = new ArrayList<>();
 
-                    List<ChunkEmbedding> chunkEmbeddingList = new ArrayList<>();
-
-                    for (int i = 0; i < response.body().data.size(); i++) {
-                        String json = new Gson().toJson(response.body().data.get(i));
-                        chunkEmbeddingList.add(new ChunkEmbedding(chunkList.get(i), json));
-                    }
-
-                    Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().insertAll(chunkEmbeddingList);
+                for (int i = 0; i < response.body().data.size(); i++) {
+                    String json = new Gson().toJson(response.body().data.get(i).embedding);
+                    chunkEmbeddingList.add(new ChunkEmbedding(chunkList.get(i), json));
                 }
+                Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().deleteAll();
+                Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().insertAll(chunkEmbeddingList);
             }
+        }.run(chunkList);
 
-            @Override
-            public void onFailure(Call<QwenV1Api.QwenEmbeddingResponse> call, Throwable t) {
-                if (null == chatAgent) {
-                    return;
-                }
-
-                chatAgent.instantMessage(new ChatMessage("Error: " + t.getMessage(), ChatMessage.Sender.AI));
-            }
-        });
     }
 
     public TextView getSelectedFileNameTextView() {
@@ -144,5 +136,50 @@ public class FileAgent {
 
     public void setChatAgent(ChatAgent chatAgent) {
         this.chatAgent = chatAgent;
+    }
+
+    public String matchMostSimilaryChunk(List<Float> questionEmbeddingVector){
+
+        for(String chunk : selectedFileContentChunks){
+
+        }
+        return "";
+    }
+
+    public List<ChunkEmbedding> getTopNRelevantChunks(List<ChunkEmbedding> chunks, List<Float> questionEmbedding, int topN) {
+        List<Pair<ChunkEmbedding, Float>> scoredChunks = new ArrayList<>();
+
+        for (ChunkEmbedding chunk : chunks) {
+            List<Float> chunkVector = parseEmbeddingJson(chunk.embeddingJson);
+            float score = cosineSimilarity(questionEmbedding, chunkVector);
+            scoredChunks.add(new Pair<>(chunk, score));
+        }
+
+        // Sort by similarity (descending)
+        scoredChunks.sort((a, b) -> Float.compare(b.second, a.second));
+
+        // Collect top-N chunks
+        List<ChunkEmbedding> topChunks = new ArrayList<>();
+        for (int i = 0; i < Math.min(topN, scoredChunks.size()); i++) {
+            topChunks.add(scoredChunks.get(i).first);
+        }
+
+        return topChunks;
+    }
+
+    private List<Float> parseEmbeddingJson(String json) {
+        Gson gson = new Gson();
+        Type type = new TypeToken<List<Float>>() {}.getType();
+        return gson.fromJson(json, type);
+    }
+
+    private float cosineSimilarity(List<Float> a, List<Float> b) {
+        float dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < a.size(); i++) {
+            dot += a.get(i) * b.get(i);
+            normA += Math.pow(a.get(i), 2);
+            normB += Math.pow(b.get(i), 2);
+        }
+        return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 }
