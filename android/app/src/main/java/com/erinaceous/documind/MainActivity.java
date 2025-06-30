@@ -24,6 +24,7 @@ import org.apache.commons.compress.utils.Lists;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -86,38 +87,40 @@ public class MainActivity extends AppCompatActivity {
 
             chatAgent.instantMessage(new ChatMessage(question, ChatMessage.Sender.USER));
             editTextMessage.setText("");
+            Executors.newSingleThreadExecutor().execute(() -> {
 
-            List<ChunkEmbedding> allChunks = Manager.getInstance(this).getAppDatabase().chunkEmbeddingDao().getAll();
-            List<ChunkEmbedding> topChunks = fileAgent.getTopNRelevantChunks(allChunks, questionEmbeddingVector, 3);
+                List<ChunkEmbedding> allChunks = Manager.getInstance(this).getAppDatabase().chunkEmbeddingDao().getAll();
+                List<ChunkEmbedding> topChunks = fileAgent.getTopNRelevantChunks(allChunks, questionEmbeddingVector, 1);
 
 
-            StringBuilder contextBuilder = new StringBuilder("");
-            for (int i = 0; i < topChunks.size(); i++) {
-                contextBuilder.append("Chunk ").append(i + 1).append(": ").append(topChunks.get(i).chunkText).append("\n");
-            }
+                StringBuilder contextBuilder = new StringBuilder("");
+                for (int i = 0; i < topChunks.size(); i++) {
+                    contextBuilder.append("Chunk ").append(i + 1).append(": ").append(topChunks.get(i).chunkText).append("\n");
+                }
 
-            // Call Qwen API here, then add the response
-//            QwenV1Api.QwenPlusRequest request = new QwenV1Api.QwenPlusRequest(selectedFileContentText, question);
-            //TODO
-            //TODO
-            QwenV1Api.QwenPlusRequest qwenPlusRequest = new QwenV1Api.QwenPlusRequest(contextBuilder.toString(), question);
+                // Call Qwen API here, then add the response
+                QwenV1Api.QwenPlusRequest qwenPlusRequest = new QwenV1Api.QwenPlusRequest(contextBuilder.toString(), question);
 
-            Manager.getInstance(this).getQwenV1Api().getAnswer(qwenPlusRequest).enqueue(new Callback<QwenPlusResponse>() {
-                @Override
-                public void onResponse(Call<QwenPlusResponse> call, Response<QwenPlusResponse> response) {
-                    if (response.isSuccessful() && response.body() != null) {
-                        String answer = response.body().choices.get(0).message.content;
-                        chatAgent.instantMessage(new ChatMessage(answer, ChatMessage.Sender.AI));
-                    } else {
-                        chatAgent.instantMessage(new ChatMessage("Failed to connect to Qwen API", ChatMessage.Sender.AI));
+                Manager.getInstance(this).getQwenV1Api().getAnswer(qwenPlusRequest).enqueue(new Callback<QwenPlusResponse>() {
+                    @Override
+                    public void onResponse(Call<QwenPlusResponse> call, Response<QwenPlusResponse> response) {
+                        if (response.isSuccessful() && response.body() != null) {
+                            String answer = response.body().choices.get(0).message.content;
+                            chatAgent.instantMessage(new ChatMessage(answer, ChatMessage.Sender.AI));
+                        } else {
+                            chatAgent.instantMessage(new ChatMessage("Failed to connect to Qwen API", ChatMessage.Sender.AI));
+                        }
                     }
-                }
 
-                @Override
-                public void onFailure(Call<QwenPlusResponse> call, Throwable t) {
-                    chatAgent.instantMessage(new ChatMessage("Error: " + t.getMessage(), ChatMessage.Sender.AI));
-                }
+                    @Override
+                    public void onFailure(Call<QwenPlusResponse> call, Throwable t) {
+                        chatAgent.instantMessage(new ChatMessage("Error: " + t.getMessage(), ChatMessage.Sender.AI));
+                    }
+                });
+
+
             });
+
         });
 
     }

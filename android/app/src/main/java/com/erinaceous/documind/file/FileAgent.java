@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -60,7 +61,6 @@ public class FileAgent {
         String type = contextWrapper.getContentResolver().getType(uri);
         List<String> chunks = new ArrayList<>();
         try (InputStream inputStream = contextWrapper.getContentResolver().openInputStream(uri)) {
-            String fullText = "";
             if (type != null && type.contains("pdf")) {
                 PDDocument document = PDDocument.load(inputStream);
                 PDFTextStripper stripper = new PDFTextStripper();
@@ -110,8 +110,11 @@ public class FileAgent {
                     String json = new Gson().toJson(response.body().data.get(i).embedding);
                     chunkEmbeddingList.add(new ChunkEmbedding(chunkList.get(i), json));
                 }
-                Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().deleteAll();
-                Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().insertAll(chunkEmbeddingList);
+                Executors.newSingleThreadExecutor().execute(() -> {
+                    Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().deleteAll();
+                    Manager.getInstance(contextWrapper).getAppDatabase().chunkEmbeddingDao().insertAll(chunkEmbeddingList);
+                });
+
             }
         }.run(chunkList);
 

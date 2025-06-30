@@ -2,6 +2,7 @@ package com.erinaceous.documind.network;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -25,8 +26,8 @@ public interface QwenV1Api {
         public QwenPlusRequest(String content, String question) {
             this.model = "qwen-plus"; // or your model name
             this.messages = Arrays.asList(
-                    new Message("system", "You are a helpful assistant."),
-                    new Message("user", "Content: \\n\\n" + content + "\n\nQuestion: " + question)
+                    new Message("system", "You are a helpful assistant that answers questions based on the following provided document content."),
+                    new Message("user", "Document content: \\n\\n" + content + "\n\nQuestion: " + question)
             );
         }
 
@@ -59,11 +60,11 @@ public interface QwenV1Api {
 
     class QwenEmbeddingRequest {
         private final String model;
-        private final List<String> inputList;
+        private final List<String> input;
 
         public QwenEmbeddingRequest(List<String> inputList) {
             this.model = "text-embedding-v1"; // or your model name
-            this.inputList = inputList;
+            this.input = inputList;
         }
     }
 
@@ -88,7 +89,9 @@ public interface QwenV1Api {
                     Request.Builder builder = original.newBuilder()
                             .header("Authorization", "Bearer YOUR_API_ID");
                     return chain.proceed(builder.build());
-                }).build();
+                }).connectTimeout(20, TimeUnit.SECONDS)
+                .writeTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS).build();
 
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1/")
